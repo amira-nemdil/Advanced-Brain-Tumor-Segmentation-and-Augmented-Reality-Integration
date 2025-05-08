@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import tensorflow as tf
-from keras import layers, models
+from tensorflow.keras import layers, models
 import nibabel as nib
 from glob import glob
 import matplotlib.pyplot as plt
@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 # CONFIGURATION
 # =====================================================
 
-DATASET_DIR = r"your_dataset_path_here"  # Path to the BRATS dataset
+DATASET_DIR = r"D:\Khedir-meriem-ESI-SBElAbes\data"  # Change this
 IMAGE_SIZE = 256
 BATCH_SIZE = 4
-EPOCHS = 50
+EPOCHS = 30
 
 # Check GPU
 device_name = tf.test.gpu_device_name()
@@ -77,12 +77,10 @@ def unet_model(input_size=(IMAGE_SIZE, IMAGE_SIZE, 1)):
     u1 = layers.UpSampling2D()(c3)
     u1 = layers.Concatenate()([u1, c2])
     c4 = layers.Conv2D(32, 3, activation='relu', padding='same')(u1)
-    c4 = layers.Conv2D(32, 3, activation='relu', padding='same')(c4)
 
     u2 = layers.UpSampling2D()(c4)
     u2 = layers.Concatenate()([u2, c1])
     c5 = layers.Conv2D(16, 3, activation='relu', padding='same')(u2)
-    c5 = layers.Conv2D(16, 3, activation='relu', padding='same')(c5)
 
     outputs = layers.Conv2D(1, 1, activation='sigmoid')(c5)
 
@@ -129,31 +127,37 @@ def attention_unet(input_size=(IMAGE_SIZE, IMAGE_SIZE, 1)):
     return models.Model(inputs, outputs)
 
 # =====================================================
-# TRAINING
+# TRAINING FUNCTION
+# =====================================================
+
+def train_model(model, model_name, train_gen, steps_per_epoch):
+    print(f"\n\nTraining {model_name}...\n")
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    history = model.fit(train_gen, steps_per_epoch=steps_per_epoch, epochs=EPOCHS)
+    
+    model.save(f"{model_name}.h5")
+    print(f"{model_name} saved.")
+    
+    return history
+
+# =====================================================
+# EXECUTION
 # =====================================================
 
 image_files = sorted(glob(os.path.join(DATASET_DIR, "imagesTr", "*.nii.gz")))
 mask_files = sorted(glob(os.path.join(DATASET_DIR, "labelsTr", "*.nii.gz")))
 
 train_gen = data_generator(image_files, mask_files)
-
-# ---- Choose model ----
-print("Choose model type: 1) U-Net  2) Attention U-Net")
-model_choice = input("Enter 1 or 2: ")
-
-if model_choice == "2":
-    model = attention_unet()
-    print("Using Attention U-Net.")
-else:
-    model = unet_model()
-    print("Using Basic U-Net.")
-
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
 steps_per_epoch = len(image_files) // BATCH_SIZE
 
-model.fit(train_gen, steps_per_epoch=steps_per_epoch, epochs=EPOCHS)
+# Train U-Net
+unet = unet_model()
+history_unet = train_model(unet, "unet_model", train_gen, steps_per_epoch)
 
-# SAVE
-model.save("brain_tumor_segmentation_model.h5")
-print("Model saved.")
+# Train Attention U-Net
+attention_unet_model = attention_unet()
+train_gen = data_generator(image_files, mask_files)  # Reset generator
+history_attention = train_model(attention_unet_model, "attention_unet_model", train_gen, steps_per_epoch)
+
+print("\n\n=== Training Finished ===")
+print("Compare training history and evaluate both models later.")
